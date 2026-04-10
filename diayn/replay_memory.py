@@ -24,6 +24,17 @@ class ReplayBuffer:
         self.ptr = (self.ptr + 1) % self.max_size
         self.size = min(self.size + 1, self.max_size)
 
+    def add_batch(self, obs, action, next_obs, skill, done):
+        n = obs.shape[0]
+        idx = np.arange(self.ptr, self.ptr + n) % self.max_size
+        self.obs[idx] = obs
+        self.action[idx] = action
+        self.next_obs[idx] = next_obs
+        self.skill[idx] = skill
+        self.done[idx] = done
+        self.ptr = (self.ptr + n) % self.max_size
+        self.size = min(self.size + n, self.max_size)
+
     def sample(self, batch_size: int, rng: np.random.Generator | None = None):
         rng = rng or np.random.default_rng()
         idx = rng.integers(0, self.size, size=batch_size)

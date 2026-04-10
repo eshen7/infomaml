@@ -83,8 +83,20 @@ class DIAYNAgent:
         action, _ = self.policy_net.sample(self.policy_params, aug_obs[None], key)
         return np.asarray(action[0])
 
+    def choose_action_batch(self, obs: jnp.ndarray, skills: jnp.ndarray) -> jnp.ndarray:
+        aug_obs = self._augment_obs_batch(obs, skills)
+        self.rng, key = jax.random.split(self.rng)
+        action, _ = self.policy_net.sample(self.policy_params, aug_obs, key)
+        return action
+
     def store(self, obs, action, next_obs, skill, done):
         self.memory.add(obs, action, next_obs, skill, done)
+
+    def store_batch(self, obs, action, next_obs, skill, done):
+        self.memory.add_batch(
+            np.asarray(obs), np.asarray(action), np.asarray(next_obs),
+            np.asarray(skill), np.asarray(done),
+        )
 
     def _train_step_impl(
         self,

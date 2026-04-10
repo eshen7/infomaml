@@ -39,7 +39,11 @@ def main():
         print(f"Num envs: {args.num_envs}, Batch size: {args.batch_size}")
         print("==================")
 
-    env = brax.envs.create(args.env)
+    env = brax.envs.create(
+        args.env,
+        episode_length=args.episode_length,
+        exclude_current_positions_from_observation=False,
+    )
     obs_dim = env.observation_size
     action_dim = env.action_size
 
@@ -50,6 +54,7 @@ def main():
         obs_dim=obs_dim,
         action_dim=action_dim,
         n_skills=args.n_skills,
+        hidden_dims=(300, 300),
         lr=args.lr,
         gamma=args.gamma,
         tau=args.tau,
@@ -87,15 +92,7 @@ def main():
         new_skills = jax.random.randint(skill_key, (args.num_envs,), 0, args.n_skills)
         skills = jnp.where(dones, new_skills, skills)
 
-        key, reset_key = jax.random.split(key)
-        reset_keys = jax.random.split(reset_key, args.num_envs)
-        reset_state = v_reset(reset_keys)
-        state = jax.tree.map(
-            lambda r, s: jnp.where(
-                dones.reshape(-1, *([1] * (r.ndim - 1))), r, s
-            ),
-            reset_state, next_state,
-        )
+        state = next_state
 
         metrics = agent.train()
         total_steps += args.num_envs

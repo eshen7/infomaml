@@ -120,7 +120,7 @@ class DIAYNAgent:
         new_disc_params = optax.apply_updates(disc_params, disc_updates)
 
         disc_logits = self.discriminator.apply(
-            jax.lax.stop_gradient(new_disc_params), next_obs
+            jax.lax.stop_gradient(new_disc_params), obs
         )
         log_q_z_s = jax.nn.log_softmax(disc_logits)[
             jnp.arange(disc_logits.shape[0]), skills

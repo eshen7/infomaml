@@ -43,8 +43,8 @@ def main():
     obs_dim = env.observation_size
     action_dim = env.action_size
 
-    v_reset = jax.vmap(env.reset)
-    v_step = jax.vmap(env.step)
+    v_reset = jax.jit(jax.vmap(env.reset))
+    v_step = jax.jit(jax.vmap(env.step))
 
     agent = DIAYNAgent(
         obs_dim=obs_dim,

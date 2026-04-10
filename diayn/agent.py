@@ -67,6 +67,7 @@ class DIAYNAgent:
         self.memory = ReplayBuffer(obs_dim, action_dim, buffer_size)
 
         self._train_step = jax.jit(self._train_step_impl)
+        self._choose_action_batch_jit = jax.jit(self._choose_action_batch_impl)
 
     def _augment_obs(self, obs: np.ndarray, skill: int) -> np.ndarray:
         one_hot = np.zeros(self.n_skills, dtype=np.float32)
@@ -83,16 +84,20 @@ class DIAYNAgent:
         action, _ = self.policy_net.sample(self.policy_params, aug_obs[None], key)
         return np.asarray(action[0])
 
-    def choose_action_batch(self, obs: jnp.ndarray, skills: jnp.ndarray) -> jnp.ndarray:
+    def _choose_action_batch_impl(self, params, obs, skills, key):
         aug_obs = self._augment_obs_batch(obs, skills)
-        self.rng, key = jax.random.split(self.rng)
-        action, _ = self.policy_net.sample(self.policy_params, aug_obs, key)
+        action, _ = self.policy_net.sample(params, aug_obs, key)
         return action
+
+    def choose_action_batch(self, obs: jnp.ndarray, skills: jnp.ndarray) -> jnp.ndarray:
+        self.rng, key = jax.random.split(self.rng)
+        return self._choose_action_batch_jit(self.policy_params, obs, skills, key)
 
     def store(self, obs, action, next_obs, skill, done):
         self.memory.add(obs, action, next_obs, skill, done)
 
     def store_batch(self, obs, action, next_obs, skill, done):
+        jax.block_until_ready((obs, action, next_obs, skill, done))
         self.memory.add_batch(
             np.asarray(obs), np.asarray(action), np.asarray(next_obs),
             np.asarray(skill), np.asarray(done),

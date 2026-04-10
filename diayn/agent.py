@@ -2,7 +2,6 @@
 
 import jax
 import jax.numpy as jnp
-import numpy as np
 import optax
 from .model import PolicyNetwork, QNetwork, Discriminator
 from .replay_memory import ReplayBuffer
@@ -33,7 +32,6 @@ class DIAYNAgent:
         self.log_p_z = -jnp.log(jnp.float32(n_skills))
 
         self.rng = jax.random.PRNGKey(seed)
-        self.np_rng = np.random.default_rng(seed)
 
         aug_obs_dim = obs_dim + n_skills
 
@@ -69,20 +67,9 @@ class DIAYNAgent:
         self._train_step = jax.jit(self._train_step_impl)
         self._choose_action_batch_jit = jax.jit(self._choose_action_batch_impl)
 
-    def _augment_obs(self, obs: np.ndarray, skill: int) -> np.ndarray:
-        one_hot = np.zeros(self.n_skills, dtype=np.float32)
-        one_hot[skill] = 1.0
-        return np.concatenate([obs, one_hot])
-
     def _augment_obs_batch(self, obs: jnp.ndarray, skills: jnp.ndarray) -> jnp.ndarray:
         one_hot = jax.nn.one_hot(skills, self.n_skills)
         return jnp.concatenate([obs, one_hot], axis=-1)
-
-    def choose_action(self, obs: np.ndarray, skill: int) -> np.ndarray:
-        aug_obs = self._augment_obs(obs, skill)
-        self.rng, key = jax.random.split(self.rng)
-        action, _ = self.policy_net.sample(self.policy_params, aug_obs[None], key)
-        return np.asarray(action[0])
 
     def _choose_action_batch_impl(self, params, obs, skills, key):
         aug_obs = self._augment_obs_batch(obs, skills)
@@ -93,15 +80,8 @@ class DIAYNAgent:
         self.rng, key = jax.random.split(self.rng)
         return self._choose_action_batch_jit(self.policy_params, obs, skills, key)
 
-    def store(self, obs, action, next_obs, skill, done):
-        self.memory.add(obs, action, next_obs, skill, done)
-
     def store_batch(self, obs, action, next_obs, skill, done):
-        jax.block_until_ready((obs, action, next_obs, skill, done))
-        self.memory.add_batch(
-            np.asarray(obs), np.asarray(action), np.asarray(next_obs),
-            np.asarray(skill), np.asarray(done),
-        )
+        self.memory.add_batch(obs, action, next_obs, skill, done)
 
     def _train_step_impl(
         self,
@@ -128,7 +108,7 @@ class DIAYNAgent:
         key_actor, key_critic = jax.random.split(key)
 
         def disc_loss_fn(dp):
-            logits = self.discriminator.apply(dp, next_obs)
+            logits = self.discriminator.apply(dp, obs)
             return -jnp.mean(
                 jax.nn.log_softmax(logits)[jnp.arange(logits.shape[0]), skills]
             )
@@ -221,8 +201,8 @@ class DIAYNAgent:
         if len(self.memory) < self.batch_size:
             return None
 
-        batch = self.memory.sample(self.batch_size, self.np_rng)
-        self.rng, key = jax.random.split(self.rng)
+        self.rng, key_sample, key_train = jax.random.split(self.rng, 3)
+        batch = self.memory.sample(self.batch_size, key_sample)
 
         (
             self.policy_params,
@@ -237,7 +217,7 @@ class DIAYNAgent:
             self.disc_opt_state,
             metrics,
         ) = self._train_step(
-            key,
+            key_train,
             self.policy_params,
             self.q1_params,
             self.q2_params,
@@ -248,11 +228,12 @@ class DIAYNAgent:
             self.q1_opt_state,
             self.q2_opt_state,
             self.disc_opt_state,
-            jnp.array(batch["obs"]),
-            jnp.array(batch["action"]),
-            jnp.array(batch["next_obs"]),
-            jnp.array(batch["skill"]),
-            jnp.array(batch["done"]),
+            batch["obs"],
+            batch["action"],
+            batch["next_obs"],
+            batch["skill"],
+            batch["done"],
         )
 
         return {k: float(v) for k, v in metrics.items()}
+

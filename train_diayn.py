@@ -12,7 +12,7 @@ from diayn import DIAYNAgent
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--env", default="ant", help="brax env name")
-    parser.add_argument("--n_skills", type=int, default=10)
+    parser.add_argument("--n_skills", type=int, default=8)
     parser.add_argument("--num_envs", type=int, default=128)
     parser.add_argument("--max_steps", type=int, default=1_000_000)
     parser.add_argument("--episode_length", type=int, default=1000)
